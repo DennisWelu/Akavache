@@ -2,15 +2,22 @@
 // ADDINS
 //////////////////////////////////////////////////////////////////////
 
-#addin "Cake.FileHelpers"
+#addin "nuget:?package=Cake.FileHelpers&version=2.0.0"
+#addin "nuget:?package=Cake.Coveralls&version=0.8.0"
+#addin "nuget:?package=Cake.PinNuGetDependency&version=3.0.1"
+#addin "nuget:?package=Cake.Powershell&version=0.4.3"
 
 //////////////////////////////////////////////////////////////////////
 // TOOLS
 //////////////////////////////////////////////////////////////////////
 
-#tool "GitReleaseManager"
-#tool "GitVersion.CommandLine"
-#tool "GitLink"
+#tool "nuget:?package=GitReleaseManager&version=0.7.0"
+#tool "nuget:?package=coveralls.io&version=1.4.2"
+#tool "nuget:?package=OpenCover&version=4.6.519"
+#tool "nuget:?package=ReportGenerator&version=3.1.2"
+#tool "nuget:?package=vswhere&version=2.4.1"
+#tool "nuget:?package=xunit.runner.console&version=2.4.0"
+
 
 //////////////////////////////////////////////////////////////////////
 // ARGUMENTS
@@ -31,87 +38,39 @@ var treatWarningsAsErrors = false;
 
 // Build configuration
 var local = BuildSystem.IsLocalBuild;
-var isRunningOnUnix = IsRunningOnUnix();
-var isRunningOnWindows = IsRunningOnWindows();
+var isPullRequest = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SYSTEM_PULLREQUEST_PULLREQUESTNUMBER"));
+var isRepository = StringComparer.OrdinalIgnoreCase.Equals("reactiveui/reactiveui", TFBuild.Environment.Repository.RepoName);
 
-var isRunningOnAppVeyor = AppVeyor.IsRunningOnAppVeyor;
-var isPullRequest = AppVeyor.Environment.PullRequest.IsPullRequest;
-var isRepository = StringComparer.OrdinalIgnoreCase.Equals("akavache/akavache", AppVeyor.Environment.Repository.Name);
-
+var isDevelopBranch = StringComparer.OrdinalIgnoreCase.Equals("develop", AppVeyor.Environment.Repository.Branch);
 var isReleaseBranch = StringComparer.OrdinalIgnoreCase.Equals("master", AppVeyor.Environment.Repository.Branch);
 var isTagged = AppVeyor.Environment.Repository.Tag.IsTag;
 
-var githubOwner = "akavache";
-var githubRepository = "akavache";
-var githubUrl = string.Format("https://github.com/{0}/{1}", githubOwner, githubRepository);
+var msBuildPath = VSWhereLatest().CombineWithFilePath("./MSBuild/15.0/Bin/MSBuild.exe");
 
-// Version
-var gitVersion = GitVersion();
-var majorMinorPatch = gitVersion.MajorMinorPatch;
-var semVersion = gitVersion.SemVer;
-var informationalVersion = gitVersion.InformationalVersion;
-var nugetVersion = gitVersion.NuGetVersion;
-var buildVersion = gitVersion.FullBuildMetaData;
+var informationalVersion = EnvironmentVariable("GitAssemblyInformationalVersion");
+
 
 // Artifacts
 var artifactDirectory = "./artifacts/";
-var packageWhitelist = new[] { "Akavache", "Akavache.Core", "Akavache.Deprecated", "Akavache.Mobile", "Akavache.Sqlite3" };
+var packageWhitelist = new[] { "Akavache", "Akavache.Mobile", "Akavache.Sqlite3", "Akavache.Core", "Akavache.Tests" };
+var testCoverageOutputFile = artifactDirectory + "OpenCover.xml";
 
 // Macros
 Action Abort = () => { throw new Exception("a non-recoverable fatal error occurred."); };
-
-Action<string> RestorePackages = (solution) =>
-{
-    NuGetRestore(solution);
-};
-
-Action<string, string> Package = (nuspec, basePath) =>
-{
-    CreateDirectory(artifactDirectory);
-
-    Information("Packaging {0} using {1} as the BasePath.", nuspec, basePath);
-
-    NuGetPack(nuspec, new NuGetPackSettings {
-        Authors                  = new [] { "Paul Betts" },
-        Owners                   = new [] { "paulcbetts" },
-
-        ProjectUrl               = new Uri(githubUrl),
-        IconUrl                  = new Uri("https://avatars0.githubusercontent.com/u/5924219?v=3&s=200"),
-        LicenseUrl               = new Uri("https://opensource.org/licenses/MIT"),
-        Copyright                = "Copyright (c) GitHub",
-        RequireLicenseAcceptance = false,
-
-        Version                  = nugetVersion,
-        Tags                     = new [] {  "Akavache", "Cache", "Xamarin", "Sqlite3", "Magic" },
-        ReleaseNotes             = new [] { string.Format("{0}/releases", githubUrl) },
-
-        Symbols                  = false,
-        Verbosity                = NuGetVerbosity.Detailed,
-        OutputDirectory          = artifactDirectory,
-        BasePath                 = basePath,
-    });
-};
-
-Action<string> SourceLink = (solutionFileName) =>
-{
-    GitLink("./", new GitLinkSettings() {
-        RepositoryUrl = githubUrl,
-        SolutionFileName = solutionFileName,
-        
-        // nb: I would love to set this to `treatErrorsAsWarnings` which defaults to `false` but GitLink trips over Akavache.Tests :/
-        // Handling project 'Akavache.Tests'
-        //   No pdb file found for 'Akavache.Tests', is project built in 'Release' mode with pdb files enabled? Expected file is 'C:\Dropbox\OSS\akavache\Akavache\src\Akavache.Tests\Akavache.Tests.pdb'
-        ErrorsAsWarnings = true, 
-    });
-};
-
 
 ///////////////////////////////////////////////////////////////////////////////
 // SETUP / TEARDOWN
 ///////////////////////////////////////////////////////////////////////////////
 Setup((context) =>
 {
-    Information("Building version {0} of Akavache. (isTagged: {1})", informationalVersion, isTagged);
+    if (!IsRunningOnWindows())
+    {
+        throw new NotImplementedException("Akavache will only build on Windows (w/Xamarin installed) because it's not possible to target UWP, WPF and Windows Forms from UNIX.");
+    }
+
+    Information("Building version {0} of Akavache.", informationalVersion);
+
+    CreateDirectory(artifactDirectory);
 });
 
 Teardown((context) =>
@@ -119,198 +78,175 @@ Teardown((context) =>
     // Executed AFTER the last task.
 });
 
-//////////////////////////////////////////////////////////////////////
-// TASKS
-//////////////////////////////////////////////////////////////////////
+
 
 Task("Build")
-    .IsDependentOn("RestorePackages")
-    .IsDependentOn("UpdateAssemblyInfo")
     .Does (() =>
 {
-    Action<string> build = (solution) =>
+     Action<string,string> build = (solution, name) =>
     {
-        // UWP (project.json) needs to be restored before it will build.
-        RestorePackages(solution);
+        Information("Building {0} using {1}", solution, msBuildPath);
 
-        Information("Building {0}", solution);
-
-        MSBuild(solution, new MSBuildSettings()
-            .SetConfiguration("Release")
-            .WithProperty("NoWarn", "1591") // ignore missing XML doc warnings
+        MSBuild(solution, new MSBuildSettings() {
+                ToolPath = msBuildPath,
+                ArgumentCustomization = args => args.Append("/m /restore")
+            }
+			
+            .WithTarget("build;pack") 
+            .WithProperty("PackageOutputPath",  MakeAbsolute(Directory(artifactDirectory)).ToString().Quote())
             .WithProperty("TreatWarningsAsErrors", treatWarningsAsErrors.ToString())
+            .SetConfiguration("Release")                        
             .SetVerbosity(Verbosity.Minimal)
             .SetNodeReuse(false));
-
-        SourceLink(solution);
+			 
     };
 
-    build("./src/Akavache.sln");
-});
-
-Task("UpdateAppVeyorBuildNumber")
-    .WithCriteria(() => isRunningOnAppVeyor)
-    .Does(() =>
-{
-    AppVeyor.UpdateBuildVersion(buildVersion);
-});
-
-Task("UpdateAssemblyInfo")
-    .IsDependentOn("UpdateAppVeyorBuildNumber")
-    .Does (() =>
-{
-    var file = "./src/CommonAssemblyInfo.cs";
-
-    CreateAssemblyInfo(file, new AssemblyInfoSettings {
-        Product = "Akavache",
-        Version = majorMinorPatch,
-        FileVersion = majorMinorPatch,
-        InformationalVersion = informationalVersion,
-        Copyright = "Copyright (c) Paul Betts"
-    });
-});
-
-Task("RestorePackages").Does (() =>
-{
-    RestorePackages("./src/Akavache.sln");
+	foreach(var package in packageWhitelist)
+    {
+        build("./src/" + package + "/" + package + ".csproj", package);
+    }        
+    build("./src/Akavache.Tests/Akavache.Tests.csproj", "Akavache.Tests");
 });
 
 Task("RunUnitTests")
     .IsDependentOn("Build")
     .Does(() =>
 {
-    XUnit2("./src/Akavache.Tests/bin/x64/Release/Akavache.Tests.dll", new XUnit2Settings {
-        OutputDirectory = artifactDirectory,
-        XmlReportV1 = false,
-        NoAppDomain = false // Akavache.Tests requires AppDomain otherwise it does not resolve System.Reactive.*
-    });
-});
+	 Action<ICakeContext> testAction = tool => {
 
-Task("Package")
-    .IsDependentOn("Build")
-    .IsDependentOn("RunUnitTests")
-    .Does (() =>
+        tool.XUnit2("./src/Akavache.Tests/bin/Release/**/*.Tests.dll", new XUnit2Settings {
+			OutputDirectory = artifactDirectory,
+			XmlReportV1 = true,
+			NoAppDomain = false
+		});
+    };
+
+    OpenCover(testAction,
+        testCoverageOutputFile,
+        new OpenCoverSettings {
+            ReturnTargetCodeOffset = 0,
+            ArgumentCustomization = args => args.Append("-mergeoutput")
+        }
+        .WithFilter("+[*]* -[*.Tests*]* -[Splat*]*")
+		.WithFilter("+[*]*")
+        .WithFilter("-[*.Testing]*")
+        .WithFilter("-[*.Tests*]*")
+        .WithFilter("-[Playground*]*")
+        .WithFilter("-[ReactiveUI.Events]*")
+        .WithFilter("-[Splat*]*")
+        .WithFilter("-[ApprovalTests*]*")
+		.ExcludeByAttribute("*.ExcludeFromCodeCoverage*")
+        .ExcludeByFile("*/*Designer.cs")
+        .ExcludeByFile("*/*.g.cs")
+        .ExcludeByFile("*/*.g.i.cs")
+        .ExcludeByFile("*splat/splat*")
+        .ExcludeByFile("*ApprovalTests*")
+        .ExcludeByFile("*/*Designer.cs;*/*.g.cs;*/*.g.i.cs;*splat/splat*"));
+
+    ReportGenerator(testCoverageOutputFile, artifactDirectory);
+}).ReportError(exception =>
 {
-    Package("./src/Akavache.nuspec", "./");
-    Package("./src/Akavache.Core.nuspec", "./src/Akavache");
-    Package("./src/Akavache.Deprecated.nuspec", "./src/Akavache.Deprecated");
-    Package("./src/Akavache.Mobile.nuspec", "./src/Akavache.Mobile");
-    Package("./src/Akavache.Sqlite3.nuspec", "./src/Akavache.Sqlite3");
+    //var apiApprovals = GetFiles("./**/ApiApprovalTests.*");
+   // CopyFiles(apiApprovals, artifactDirectory);
 });
 
-Task("PublishPackages")
-    .IsDependentOn("RunUnitTests")
-    .IsDependentOn("Package")
+
+Task("UploadTestCoverage")
     .WithCriteria(() => !local)
-    .WithCriteria(() => !isPullRequest)
     .WithCriteria(() => isRepository)
-    .Does (() =>
+    .IsDependentOn("RunUnitTests")
+    .Does(() =>
 {
-    if (isReleaseBranch && !isTagged)
-    {
-        Information("Packages will not be published as this release has not been tagged.");
-        return;
-    }
-
     // Resolve the API key.
-    var apiKey = EnvironmentVariable("NUGET_APIKEY");
-    if (string.IsNullOrEmpty(apiKey))
+    var token = EnvironmentVariable("COVERALLS_TOKEN");
+    if (!string.IsNullOrEmpty(token))
     {
-        throw new Exception("The NUGET_APIKEY environment variable is not defined.");
-    }
-
-    var source = EnvironmentVariable("NUGET_SOURCE");
-    if (string.IsNullOrEmpty(source))
-    {
-        throw new Exception("The NUGET_SOURCE environment variable is not defined.");
-    }
-
-    // only push whitelisted packages.
-    foreach(var package in packageWhitelist)
-    {
-        // only push the package which was created during this build run.
-        var packagePath = artifactDirectory + File(string.Concat(package, ".", nugetVersion, ".nupkg"));
-
-        // Push the package.
-        NuGetPush(packagePath, new NuGetPushSettings {
-            Source = source,
-            ApiKey = apiKey
+        CoverallsIo(testCoverageOutputFile, new CoverallsIoSettings()
+        {
+            RepoToken = token
         });
     }
 });
 
-Task("CreateRelease")
-    .IsDependentOn("RunUnitTests")
-    .IsDependentOn("Package")
-    .WithCriteria(() => !local)
-    .WithCriteria(() => !isPullRequest)
-    .WithCriteria(() => isRepository)
-    .WithCriteria(() => isReleaseBranch)
-    .WithCriteria(() => !isTagged)
+
+
+Task("Package")
+   .IsDependentOn("Build")
+   .IsDependentOn("RunUnitTests")
+   .IsDependentOn("PinNuGetDependencies")
     .Does (() =>
 {
-    var username = EnvironmentVariable("GITHUB_USERNAME");
-    if (string.IsNullOrEmpty(username))
-    {
-        throw new Exception("The GITHUB_USERNAME environment variable is not defined.");
-    }
 
-    var token = EnvironmentVariable("GITHUB_TOKEN");
-    if (string.IsNullOrEmpty(token))
-    {
-        throw new Exception("The GITHUB_TOKEN environment variable is not defined.");
-    }
+   /* var  integrationPathRoot = "tests/NuGetInstallationIntegrationTests/";
+    var allfiles = 
+        System.IO.Directory.GetFiles(integrationPathRoot, "*.csproj", System.IO.SearchOption.AllDirectories);
 
-    GitReleaseManagerCreate(username, token, githubOwner, githubRepository, new GitReleaseManagerCreateSettings {
-        Milestone         = majorMinorPatch,
-        Name              = majorMinorPatch,
-        Prerelease        = true,
-        TargetCommitish   = "master"
-    });
+    var replacementString = "REPLACEME-AKAVACHE-VERSION";
+    List<string> replacedFiles = new List<string>();
+
+    try
+    {
+        foreach(var file in allfiles)
+        {
+            var fileContents = System.IO.File.ReadAllText(file);
+            if(fileContents.IndexOf(replacementString) >= 0)
+            {
+                fileContents = fileContents.Replace(replacementString, nugetVersion.ToString());         
+                System.IO.File.WriteAllText(file, fileContents);
+                replacedFiles.Add(file);
+            }
+        }
+        
+        
+        NuGetRestore(integrationPathRoot + "NuGetInstallationIntegrationTests.sln", 
+            new NuGetRestoreSettings() { 
+                ConfigFile = integrationPathRoot + @".nuget/Nuget.config",
+                PackagesDirectory = integrationPathRoot + "packages" });
+
+
+        MSBuild(integrationPathRoot + "NuGetInstallationIntegrationTests.sln", new MSBuildSettings() {
+                    ToolPath= msBuildPath
+                }
+        .SetConfiguration("Debug"));
+
+    }
+    finally
+    {
+         foreach(var file in replacedFiles)
+        {
+            var fileContents = System.IO.File.ReadAllText(file);            
+            fileContents = fileContents.Replace(nugetVersion.ToString(), replacementString);         
+            System.IO.File.WriteAllText(file, fileContents);
+        }
+    }
+	*/
 });
 
-Task("PublishRelease")
-    .IsDependentOn("RunUnitTests")
-    .IsDependentOn("Package")
-    .WithCriteria(() => !local)
-    .WithCriteria(() => !isPullRequest)
-    .WithCriteria(() => isRepository)
-    .WithCriteria(() => isReleaseBranch)
-    .WithCriteria(() => isTagged)
+Task("PinNuGetDependencies")
     .Does (() =>
 {
-    var username = EnvironmentVariable("GITHUB_USERNAME");
-    if (string.IsNullOrEmpty(username))
+    var packages = GetFiles(artifactDirectory + "*.nupkg");
+    foreach(var package in packages)
     {
-        throw new Exception("The GITHUB_USERNAME environment variable is not defined.");
+        // only pin whitelisted packages.
+        if(packageWhitelist.Any(p => package.GetFilename().ToString().StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+        {
+            // see https://github.com/cake-contrib/Cake.PinNuGetDependency
+            PinNuGetDependency(package, "Akavache");
+        }
     }
-
-    var token = EnvironmentVariable("GITHUB_TOKEN");
-    if (string.IsNullOrEmpty(token))
-    {
-        throw new Exception("The GITHUB_TOKEN environment variable is not defined.");
-    }
-
-    // only push whitelisted packages.
-    foreach(var package in packageWhitelist)
-    {
-        // only push the package which was created during this build run.
-        var packagePath = artifactDirectory + File(string.Concat(package, ".", nugetVersion, ".nupkg"));
-
-        GitReleaseManagerAddAssets(username, token, githubOwner, githubRepository, majorMinorPatch, packagePath);
-    }
-
-    GitReleaseManagerClose(username, token, githubOwner, githubRepository, majorMinorPatch);
 });
+
 
 //////////////////////////////////////////////////////////////////////
 // TASK TARGETS
 //////////////////////////////////////////////////////////////////////
 
 Task("Default")
-    .IsDependentOn("CreateRelease")
+    .IsDependentOn("Package")
+    /*.IsDependentOn("CreateRelease")
     .IsDependentOn("PublishPackages")
-    .IsDependentOn("PublishRelease")
+    .IsDependentOn("PublishRelease")*/
     .Does (() =>
 {
 
