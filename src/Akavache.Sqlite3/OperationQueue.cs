@@ -91,6 +91,10 @@ namespace Akavache.Sqlite3
                         break;
                     }
 
+                    //Verify lock was acquired
+                    if(@lock == null)
+                        break;
+
                     using (@lock)
                     {
                         // NB: We special-case the first item because we want to 
@@ -143,10 +147,14 @@ namespace Akavache.Sqlite3
                 } 
                 catch (OperationCanceledException) { }
 
-                using (flushLock.LockAsync().Result)
+                try 
                 {
-                    FlushInternal();
+                    using(flushLock.LockAsync().Result)
+                    {
+                        FlushInternal();
+                    }
                 }
+                catch(OperationCanceledException) { }
 
                 start = null;
             }));
@@ -242,7 +250,11 @@ namespace Akavache.Sqlite3
                     var lockTask = flushLock.LockAsync(shouldQuit.Token);
                     operationQueue.Add(OperationQueueItem.CreateUnit(OperationType.DoNothing));
 
-                    @lock = await lockTask;
+                    try 
+                    {
+                        @lock = await lockTask;
+                    }
+                    catch(OperationCanceledException) { }
 
                     var deleteOp = OperationQueueItem.CreateUnit(OperationType.DeleteExpiredSqliteOperation);
                     operationQueue.Add(deleteOp);
