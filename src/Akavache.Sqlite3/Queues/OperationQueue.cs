@@ -27,6 +27,7 @@ namespace Akavache.Sqlite3
     internal partial class SqliteOperationQueue : IEnableLogger, IDisposable
     {
         private readonly AsyncLock _flushLock = new AsyncLock();
+        private readonly SQLiteConnection _connection;
         private readonly IScheduler _scheduler;
 
         private readonly Lazy<BulkSelectSqliteOperation> _bulkSelectKey;
@@ -54,6 +55,7 @@ namespace Akavache.Sqlite3
         /// <param name="scheduler">The scheduler to perform operations against.</param>
         public SqliteOperationQueue(SQLiteConnection connection, IScheduler scheduler)
         {
+            _connection = connection;
             _scheduler = scheduler;
 
             _bulkSelectKey = new Lazy<BulkSelectSqliteOperation>(() => new BulkSelectSqliteOperation(connection, false, scheduler));
@@ -411,8 +413,12 @@ namespace Akavache.Sqlite3
         private void ProcessItems(List<OperationQueueItem> toProcess)
         {
             var commitResult = new AsyncSubject<Unit>();
+            var isManuallyControlledTransaction = _connection.IsInTransaction;
 
-            _begin.Value.PrepareToExecute()();
+            if (!isManuallyControlledTransaction)
+            {
+                _begin.Value.PrepareToExecute()();
+            }
 
             foreach (var item in toProcess)
             {
@@ -454,7 +460,10 @@ namespace Akavache.Sqlite3
 
             try
             {
-                _commit.Value.PrepareToExecute()();
+                if (!isManuallyControlledTransaction)
+                {
+                    _commit.Value.PrepareToExecute()();
+                }
 
                 // NB: We do this in a scheduled result to stop a deadlock in
                 // First and friends
