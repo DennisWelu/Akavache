@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reactive;
 using System.Reactive.Concurrency;
@@ -45,6 +46,7 @@ namespace Akavache.Sqlite3
         private BlockingCollection<OperationQueueItem> _operationQueue =
             new BlockingCollection<OperationQueueItem>();
 
+        [SuppressMessage("Design", "CA2213: dispose field", Justification = "Will be invalid")]
         private IDisposable _start;
         private CancellationTokenSource _shouldQuit;
 
@@ -278,7 +280,7 @@ namespace Akavache.Sqlite3
 
                     try
                     {
-                        @lock = await lockTask;
+                        @lock = await lockTask.ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)
                     {
@@ -374,6 +376,10 @@ namespace Akavache.Sqlite3
             {
                 _commit.Value.Dispose();
             }
+
+            _operationQueue?.Dispose();
+            _flushLock?.Dispose();
+            _shouldQuit?.Dispose();
         }
 
         internal List<OperationQueueItem> DumpQueue()
@@ -402,6 +408,7 @@ namespace Akavache.Sqlite3
         }
 
         // NB: Callers must hold flushLock to call this
+        [SuppressMessage("Design", "CA2000: dispose variable", Justification = "Swapped ownership.")]
         private void FlushInternal()
         {
             var newQueue = new BlockingCollection<OperationQueueItem>();
@@ -410,6 +417,7 @@ namespace Akavache.Sqlite3
             ProcessItems(CoalesceOperations(existingItems));
         }
 
+        [SuppressMessage("Design", "CA2000: Dispose variable", Justification = "Ownership transferred.")]
         private void ProcessItems(List<OperationQueueItem> toProcess)
         {
             var commitResult = new AsyncSubject<Unit>();
@@ -452,9 +460,9 @@ namespace Akavache.Sqlite3
                         MarshalCompletion(item.Completion, _deleteExpired.Value.PrepareToExecute(), commitResult);
                         break;
                     case OperationType.VacuumSqliteOperation:
-                        throw new ArgumentException("Vacuum operation can't run inside transaction");
+                        throw new ArgumentException("Vacuum operation can't run inside transaction", nameof(toProcess));
                     default:
-                        throw new ArgumentException("Unknown operation");
+                        throw new ArgumentException("Unknown operation", nameof(toProcess));
                 }
             }
 
