@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reactive;
 using System.Reactive.Subjects;
@@ -255,6 +256,7 @@ namespace Akavache.Sqlite3
                 OperationType.BulkInsertSqliteOperation, elements, subj);
         }
 
+        [SuppressMessage("Design", "CA2000: Dispose variable", Justification = "Ownership transferred.")]
         private static OperationQueueItem GroupUnrelatedDeletes(IEnumerable<OperationQueueItem> unrelatedDeletes)
         {
             var subj = new AsyncSubject<Unit>();
@@ -294,7 +296,7 @@ namespace Akavache.Sqlite3
                 case OperationType.DoNothing:
                     return default(string);
                 default:
-                    throw new ArgumentException("Unknown operation");
+                    throw new ArgumentException("Unknown operation", nameof(item));
             }
         }
 
@@ -312,7 +314,7 @@ namespace Akavache.Sqlite3
                         (AsyncSubject<Unit>)source,
                         subjs.Cast<AsyncSubject<Unit>>());
                 default:
-                    throw new ArgumentException("Invalid operation type");
+                    throw new ArgumentException("Invalid operation type", nameof(opType));
             }
         }
 

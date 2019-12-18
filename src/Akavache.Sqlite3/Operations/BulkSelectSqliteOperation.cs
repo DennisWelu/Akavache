@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
@@ -15,6 +16,7 @@ using SQLitePCL;
 
 namespace Akavache.Sqlite3
 {
+    [SuppressMessage("Design", "CA2213: Non disposed field", Justification = "Disposed, just as part of interlock.")]
     internal class BulkSelectSqliteOperation : IPreparedSqliteOperation
     {
         private readonly sqlite3_stmt[] _selectOps;
@@ -36,7 +38,7 @@ namespace Akavache.Sqlite3
                         $"SELECT Key,TypeName,Value,Expiration,CreatedAt FROM CacheElement WHERE {column} In ({qs})",
                         out sqlite3_stmt stmt);
 
-                    var error = raw.sqlite3_errmsg(conn.Handle);
+                    var error = raw.sqlite3_errmsg(conn.Handle).utf8_to_string();
                     if (result != SQLite3.Result.OK)
                     {
                         throw new SQLiteException(result, "Couldn't prepare statement: " + error);
@@ -77,9 +79,9 @@ namespace Akavache.Sqlite3
                     {
                         var ce = new CacheElement()
                         {
-                            Key = raw.sqlite3_column_text(selectOp, 0),
-                            TypeName = raw.sqlite3_column_text(selectOp, 1),
-                            Value = raw.sqlite3_column_blob(selectOp, 2),
+                            Key = raw.sqlite3_column_text(selectOp, 0).utf8_to_string(),
+                            TypeName = raw.sqlite3_column_text(selectOp, 1).utf8_to_string(),
+                            Value = raw.sqlite3_column_blob(selectOp, 2).ToArray(),
                             Expiration = new DateTime(raw.sqlite3_column_int64(selectOp, 3)),
                             CreatedAt = new DateTime(raw.sqlite3_column_int64(selectOp, 4)),
                         };

@@ -188,7 +188,7 @@ For more info about using your own versions of [SqlitePCL.raw](https://github.co
 
 ### Examining Akavache caches
 
-Using [Akavache Explorer](https://github.com/paulcbetts/AkavacheExplorer), you
+Using [Akavache Explorer](https://github.com/anaisbetts/AkavacheExplorer), you
 can dig into Akavache repos for debugging purposes to see what has been stored.
 
 ![](http://f.cl.ly/items/2D3Y0L0k262X0U0y3B0e/Image%202012.05.07%206:57:48%20PM.png)
@@ -201,13 +201,16 @@ easier to get started.
 
 ### DateTime/DateTimeOffset Considerations ###
 
-By default JSON.NET's BSON implementation writes `DateTime` as UTC and reads it back in local time.
+Our default implementation overrides BSON to read and write DateTime's as UTC.
 To override the reader's behavior you can set `BlobCache.ForcedDateTimeKind` as in the following example:
 
 ```cs
-// Sets the reader to return DateTime/DateTimeOffset in UTC.
-BlobCache.ForcedDateTimeKind = DateTimeKind.Utc;
+// Sets the reader to return DateTime/DateTimeOffset in Local.
+BlobCache.ForcedDateTimeKind = DateTimeKind.Local;
 ```
+
+`DateTime` are stored as ticks for high precision.
+`DateTimeOffset` are stored as ticks for both the Date/Time aspect and the offset.
 
 ## Basic Method Documentation
 

@@ -1,7 +1,7 @@
 ﻿<Project Sdk="MSBuild.Sdk.Extras">
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;Xamarin.iOS10;Xamarin.Mac20;MonoAndroid80;netcoreapp2.0;tizen40</TargetFrameworks>
-    <TargetFrameworks Condition=" '$(OS)' == 'Windows_NT' ">$(TargetFrameworks);net461;uap10.0.17763</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;Xamarin.iOS10;Xamarin.Mac20;MonoAndroid81;netcoreapp2.0;tizen40</TargetFrameworks>
+    <TargetFrameworks Condition=" '$(OS)' == 'Windows_NT' ">$(TargetFrameworks);net461;uap10.0.16299</TargetFrameworks>
     <AssemblyName>Akavache.Core</AssemblyName>
     <RootNamespace>Akavache</RootNamespace>
     <Description>An asynchronous, persistent key-value store for desktop and mobile applications on .NET</Description>
@@ -9,10 +9,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="12.0.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.2" />
     <PackageReference Include="Newtonsoft.Json.Bson" Version="1.0.2" />
-    <PackageReference Include="System.Reactive" Version="4.0.0" />
-    <PackageReference Include="Splat" Version="7.*" />
+    <PackageReference Include="System.Reactive" Version="4.2.0" />
+    <PackageReference Include="Splat" Version="9.*" />
+    <PackageReference Include="Splat.Drawing" Version="9.*" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,20 +27,20 @@
     <PackageReference Include="System.Diagnostics.Contracts" Version="4.3.0" />
     <PackageReference Include="System.Dynamic.Runtime" Version="4.3.0" />
     <PackageReference Include="System.Runtime.Serialization.Primitives" Version="4.3.0" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="4.5.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="4.6.0" />
   </ItemGroup>
 
 
-  <ItemGroup Condition=" ! $(TargetFramework.StartsWith('netstandard'))  And ! $(TargetFramework.StartsWith('uap'))">
+  <ItemGroup Condition=" !$(TargetFramework.StartsWith('netstandard'))  And !$(TargetFramework.StartsWith('uap'))">
     <Compile Include="Platforms\shared-not-uwp\**\*.cs" />
   </ItemGroup>
 
-  <ItemGroup Condition=" ! $(TargetFramework.StartsWith('netstandard')) ">
+  <ItemGroup Condition=" !$(TargetFramework.StartsWith('netstandard')) ">
     <Compile Include="Platforms\shared\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup Condition=" $(TargetFramework.StartsWith('net4')) ">
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="4.5.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="4.6.0" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
   </ItemGroup>
 
@@ -65,6 +66,12 @@
     <Reference Include="System.Runtime.Serialization" />
   </ItemGroup>
 
+  <Target Name="_RemoveNonExistingResgenFile" BeforeTargets="CoreCompile" Condition="'$(_SdkSetAndroidResgenFile)' == 'true' And '$(AndroidResgenFile)' != '' And !Exists('$(AndroidResgenFile)')">
+    <ItemGroup>
+      <Compile Remove="$(AndroidResgenFile)"/>
+    </ItemGroup>
+  </Target>
+
   <ItemGroup Condition=" $(TargetFramework.StartsWith('tizen40')) ">
     <Compile Include="Platforms\tizen\**\*.cs" />
     <Compile Include="Platforms\xamarin-mobile\**\*.cs" />
@@ -72,6 +79,6 @@
     
   <ItemGroup Condition=" $(TargetFramework.StartsWith('netcoreapp')) ">
     <PackageReference Include="System.Runtime.Serialization.Primitives" Version="4.3.0" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="4.5.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="4.6.0" />
   </ItemGroup>
 </Project>
