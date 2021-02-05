@@ -1,22 +1,18 @@
 ﻿<Project Sdk="MSBuild.Sdk.Extras">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;Xamarin.iOS10;Xamarin.Mac20;MonoAndroid81;tizen40</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;Xamarin.iOS10;Xamarin.Mac20;MonoAndroid10.0;tizen40;net5.0</TargetFrameworks>
     <TargetFrameworks Condition=" '$(OS)' == 'Windows_NT' ">$(TargetFrameworks);net461;uap10.0.16299</TargetFrameworks>
     <AssemblyName>Akavache.Mobile</AssemblyName>
     <RootNamespace>Akavache.Mobile</RootNamespace>
     <Description>An asynchronous, persistent key-value store for desktop and mobile applications on .NET</Description>
     <PackageId>akavache.mobile</PackageId>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <Target Name="_RemoveNonExistingResgenFile" BeforeTargets="CoreCompile" Condition="'$(_SdkSetAndroidResgenFile)' == 'true' And '$(AndroidResgenFile)' != '' And !Exists('$(AndroidResgenFile)')">
-    <ItemGroup>
-      <Compile Remove="$(AndroidResgenFile)"/>
-    </ItemGroup>
-  </Target>
-
   <ItemGroup>
-    <PackageReference Include="reactiveui" Version="11.*" />
+    <PackageReference Include="reactiveui" Version="13.*" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2019 .NET Foundation and Contributors. All rights reserved.
+﻿// Copyright (c) 2020 .NET Foundation and Contributors. All rights reserved.
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for full license information.
@@ -37,7 +37,7 @@ namespace Akavache
 
             var fdr = typeof(DependencyResolverMixin);
 
-            if (fdr == null || fdr.AssemblyQualifiedName == null)
+            if (fdr is null || fdr.AssemblyQualifiedName is null)
             {
                 throw new Exception($"Cannot find valid assembly name for the {nameof(DependencyResolverMixin)} class.");
             }
@@ -45,18 +45,29 @@ namespace Akavache
             var assemblyName = new AssemblyName(
                 fdr.AssemblyQualifiedName.Replace(fdr.FullName + ", ", string.Empty));
 
+            if (assemblyName.Name is null)
+            {
+                throw new InvalidOperationException("Could not find a valid name for assembly");
+            }
+
             foreach (var ns in namespaces)
             {
                 var targetType = ns + ".Registrations";
                 string fullName = targetType + ", " + assemblyName.FullName.Replace(assemblyName.Name, ns);
 
                 var registerTypeClass = Type.GetType(fullName, false);
-                if (registerTypeClass == null)
+                if (registerTypeClass is null)
                 {
                     continue;
                 }
 
-                var registerer = (IWantsToRegisterStuff)Activator.CreateInstance(registerTypeClass);
+                var registerer = (IWantsToRegisterStuff?)Activator.CreateInstance(registerTypeClass);
+
+                if (registerer is null)
+                {
+                    continue;
+                }
+
                 registerer.Register(resolver, readonlyDependencyResolver);
             }
         }

@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2019 .NET Foundation and Contributors. All rights reserved.
+﻿// Copyright (c) 2020 .NET Foundation and Contributors. All rights reserved.
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for full license information.
@@ -16,11 +16,6 @@ namespace Akavache.Tests
     /// </summary>
     public abstract class DateTimeTestBase
     {
-        /// <summary>
-        /// Time zone for when testing UTC vs local time operations. Just has to be something that doesn't match UTC.
-        /// </summary>
-        private const string TestTimeZone = "Pacific Standard Time";
-
         /// <summary>
         /// Gets the date time offsets used in theory tests.
         /// </summary>
@@ -56,7 +51,7 @@ namespace Akavache.Tests
         /// <summary>
         /// Gets the date time when the tests are done to keep them consistent.
         /// </summary>
-        private static DateTime LocalTestNow { get; } = TimeZoneInfo.ConvertTimeFromUtc(TestNow.ToUniversalTime(), TimeZoneInfo.FindSystemTimeZoneById(TestTimeZone));
+        private static DateTime LocalTestNow { get; } = TimeZoneInfo.ConvertTimeFromUtc(TestNow.ToUniversalTime(), TimeZoneInfo.CreateCustomTimeZone("testTimeZone", TimeSpan.FromHours(6), "Test Time Zone", "Test Time Zone"));
 
         /// <summary>
         /// Gets the date time off set when the tests are done to keep them consistent.
@@ -158,7 +153,7 @@ namespace Akavache.Tests
         /// <param name="blobCache">The blob cache to perform the operation against.</param>
         /// <param name="data">The data to grab.</param>
         /// <returns>A task with the data found.</returns>
-        private async Task<(TData first, TData second)> PerformTimeStampGrab<TData>(IBlobCache blobCache, TData data)
+        private async Task<(TData First, TData Second)> PerformTimeStampGrab<TData>(IBlobCache blobCache, TData data)
         {
             const string key = "key";
 

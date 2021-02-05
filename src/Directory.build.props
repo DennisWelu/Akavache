@@ -3,7 +3,7 @@
     <Copyright>Copyright (c) .NET Foundation and Contributors</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/reactiveui/akavache/</PackageProjectUrl>
-    <PackageIconUrl>https://avatars0.githubusercontent.com/u/5924219?v=3&amp;s=200</PackageIconUrl>
+    <PackageIconUrl>https://raw.githubusercontent.com/reactiveui/styleguide/master/logo_akavache/main.png</PackageIconUrl>
     <Authors>.NET Foundation and Contributors</Authors>
     <Owners>xanaisbettsx;ghuntley</Owners>
     <PackageTags>Akavache;Cache;Xamarin;Sqlite3;Magic</PackageTags>
@@ -21,8 +21,7 @@
     <!-- Optional: Include PDB in the built .nupkg -->
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <!-- disable sourcelink on mono, to workaround https://github.com/dotnet/sourcelink/issues/155 -->
-    <EnableSourceLink Condition=" '$(OS)' != 'Windows_NT' AND '$(MSBuildRuntimeType)' != 'Core' ">false</EnableSourceLink>
-    <EnableSourceControlManagerQueries>$(EnableSourceLink)</EnableSourceControlManagerQueries>    
+    <WarningsAsErrors>CS8600;CS8602;CS8603;CS8604;CS8605;CS8606;CS8607;CS8608;CS8609;CS8610;CS8611;CS8612;CS8613;CS8614;CS8615;CS8616;CS8617;CS8618;CS8619;CS8620;CS8621;CS8622;CS8623;CS8624;CS8625;CS8626;CS8627;CS8628;CS8629;CS8630;CS8634;CS8766;CS8767</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
@@ -30,7 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Nerdbank.GitVersioning" Version="3.1.91" PrivateAssets="all" />
+    <PackageReference Include="Nerdbank.GitVersioning" Version="3.3.37" PrivateAssets="all" />
   </ItemGroup>
   
   <ItemGroup Condition="'$(IsTestProject)' != 'true' and '$(SourceLinkEnabled)' != 'false'">
@@ -38,9 +37,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="stylecop.analyzers" Version="1.2.0-beta.113" PrivateAssets="all" />
-    <PackageReference Include="Roslynator.Analyzers" Version="2.3.0" PrivateAssets="All" />
-    <PackageReference Include="Microsoft.CodeAnalysis.FxCopAnalyzers" Version="3.0.0" PrivateAssets="all" />
+    <PackageReference Include="stylecop.analyzers" Version="1.2.0-beta.321" PrivateAssets="all" />
+    <PackageReference Include="Roslynator.Analyzers" Version="3.1.0" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="5.0.3" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)stylecop.json" Link="stylecop.json" />

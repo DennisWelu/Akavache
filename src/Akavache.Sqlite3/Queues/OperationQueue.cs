@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2019 .NET Foundation and Contributors. All rights reserved.
+﻿// Copyright (c) 2020 .NET Foundation and Contributors. All rights reserved.
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for full license information.
@@ -47,8 +47,8 @@ namespace Akavache.Sqlite3
             new BlockingCollection<OperationQueueItem>();
 
         [SuppressMessage("Design", "CA2213: dispose field", Justification = "Will be invalid")]
-        private IDisposable _start;
-        private CancellationTokenSource _shouldQuit;
+        private IDisposable? _start;
+        private CancellationTokenSource? _shouldQuit;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SqliteOperationQueue"/> class.
@@ -80,7 +80,9 @@ namespace Akavache.Sqlite3
         /// NB: This constructor is used for testing operation coalescing,
         /// don't actually use it for reals.
         /// </remarks>
+#pragma warning disable CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
         internal SqliteOperationQueue()
+#pragma warning restore CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
         {
         }
 
@@ -90,7 +92,7 @@ namespace Akavache.Sqlite3
         /// <returns>A disposable which when Disposed will stop the queue.</returns>
         public IDisposable Start()
         {
-            if (_start != null)
+            if (_start is not null)
             {
                 return _start;
             }
@@ -104,7 +106,7 @@ namespace Akavache.Sqlite3
                 {
                     toProcess.Clear();
 
-                    IDisposable @lock;
+                    IDisposable? @lock;
 
                     try
                     {
@@ -116,7 +118,7 @@ namespace Akavache.Sqlite3
                     }
 
                     // Verify lock was acquired
-                    if (@lock == null)
+                    if (@lock is null)
                     {
                         break;
                     }
@@ -127,7 +129,7 @@ namespace Akavache.Sqlite3
                         // in the empty list case, we want to wait until we have an item.
                         // Once we have a single item, we try to fetch as many as possible
                         // until we've got enough items.
-                        OperationQueueItem item;
+                        OperationQueueItem? item;
                         try
                         {
                             item = _operationQueue.Take(_shouldQuit.Token);
@@ -140,13 +142,13 @@ namespace Akavache.Sqlite3
                         // NB: We explicitly want to bail out *here* because we
                         // never want to bail out in the middle of processing
                         // operations, to guarantee that we won't orphan them
-                        if (_shouldQuit.IsCancellationRequested && item == null)
+                        if (_shouldQuit.IsCancellationRequested && item is null)
                         {
                             break;
                         }
 
                         toProcess.Add(item);
-                        while (toProcess.Count < Constants.OperationQueueChunkSize && _operationQueue.TryTake(out item))
+                        while (toProcess.Count < Constants.OperationQueueChunkSize && _operationQueue.TryTake(out item) && item is not null)
                         {
                             toProcess.Add(item);
                         }
@@ -263,7 +265,7 @@ namespace Akavache.Sqlite3
 
             Task.Run(async () =>
             {
-                IDisposable @lock = null;
+                IDisposable? @lock = null;
                 try
                 {
                     // NB. While the documentation for SemaphoreSlim (which powers AsyncLock)
@@ -275,7 +277,7 @@ namespace Akavache.Sqlite3
                     // have had a chance to acquire it.
                     //
                     // 1. http://referencesource.microsoft.com/#mscorlib/system/threading/SemaphoreSlim.cs,d57f52e0341a581f
-                    var lockTask = _flushLock.LockAsync(_shouldQuit.Token);
+                    var lockTask = _flushLock.LockAsync(_shouldQuit?.Token ?? CancellationToken.None);
                     _operationQueue.Add(OperationQueueItem.CreateUnit(OperationType.DoNothing));
 
                     try

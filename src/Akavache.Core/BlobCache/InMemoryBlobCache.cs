@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2019 .NET Foundation and Contributors. All rights reserved.
+﻿// Copyright (c) 2020 .NET Foundation and Contributors. All rights reserved.
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for full license information.
@@ -27,10 +27,11 @@ namespace Akavache
     {
         [SuppressMessage("Design", "CA2213: non-disposed field.", Justification = "Used for notification of dispose.")]
         private readonly AsyncSubject<Unit> _shutdown = new AsyncSubject<Unit>();
-        private readonly IDisposable _inner;
+        private readonly IDisposable? _inner;
         private Dictionary<string, CacheEntry> _cache = new Dictionary<string, CacheEntry>();
         private bool _disposed;
         private DateTimeKind? _dateTimeKind;
+        private JsonDateTimeContractResolver _jsonDateTimeContractResolver = new JsonDateTimeContractResolver(); // This will make us use ticks instead of json ticks for DateTime.
 
         /// <summary>
         /// Initializes a new instance of the <see cref="InMemoryBlobCache"/> class.
@@ -63,7 +64,7 @@ namespace Akavache
         /// </summary>
         /// <param name="scheduler">The scheduler to use for Observable based operations.</param>
         /// <param name="initialContents">The initial contents of the cache.</param>
-        public InMemoryBlobCache(IScheduler scheduler, IEnumerable<KeyValuePair<string, byte[]>> initialContents)
+        public InMemoryBlobCache(IScheduler? scheduler, IEnumerable<KeyValuePair<string, byte[]>>? initialContents)
         {
             Scheduler = scheduler ?? CurrentThreadScheduler.Instance;
             foreach (var item in initialContents ?? Enumerable.Empty<KeyValuePair<string, byte[]>>())
@@ -80,7 +81,7 @@ namespace Akavache
         /// <param name="initialContents">The initial contents of the cache.</param>
         internal InMemoryBlobCache(
             Action disposer,
-            IScheduler scheduler,
+            IScheduler? scheduler,
             IEnumerable<KeyValuePair<string, byte[]>> initialContents)
             : this(scheduler, initialContents)
         {
@@ -91,7 +92,16 @@ namespace Akavache
         public DateTimeKind? ForcedDateTimeKind
         {
             get => _dateTimeKind ?? BlobCache.ForcedDateTimeKind;
-            set => _dateTimeKind = value;
+
+            set
+            {
+                _dateTimeKind = value;
+
+                if (_jsonDateTimeContractResolver is not null)
+                {
+                    _jsonDateTimeContractResolver.ForceDateTimeKindOverride = value;
+                }
+            }
         }
 
         /// <inheritdoc />
@@ -106,7 +116,7 @@ namespace Akavache
         /// <param name="scheduler">The default scheduler to use.</param>
         /// <param name="initialContents">The default inner contents to use.</param>
         /// <returns>A generated cache.</returns>
-        public static InMemoryBlobCache OverrideGlobals(IScheduler scheduler = null, params KeyValuePair<string, byte[]>[] initialContents)
+        public static InMemoryBlobCache OverrideGlobals(IScheduler? scheduler = null, params KeyValuePair<string, byte[]>[] initialContents)
         {
             var local = BlobCache.LocalMachine;
             var user = BlobCache.UserAccount;
@@ -133,7 +143,7 @@ namespace Akavache
         /// <param name="initialContents">The default inner contents to use.</param>
         /// <param name="scheduler">The default scheduler to use.</param>
         /// <returns>A generated cache.</returns>
-        public static InMemoryBlobCache OverrideGlobals(IDictionary<string, byte[]> initialContents, IScheduler scheduler = null)
+        public static InMemoryBlobCache OverrideGlobals(IDictionary<string, byte[]> initialContents, IScheduler? scheduler = null)
         {
             return OverrideGlobals(scheduler, initialContents.ToArray());
         }
@@ -144,7 +154,7 @@ namespace Akavache
         /// <param name="initialContents">The default inner contents to use.</param>
         /// <param name="scheduler">The default scheduler to use.</param>
         /// <returns>A generated cache.</returns>
-        public static InMemoryBlobCache OverrideGlobals(IDictionary<string, object> initialContents, IScheduler scheduler = null)
+        public static InMemoryBlobCache OverrideGlobals(IDictionary<string, object> initialContents, IScheduler? scheduler = null)
         {
             var initialSerializedContents = initialContents
                 .Select(item => new KeyValuePair<string, byte[]>(item.Key, JsonSerializationMixin.SerializeObject(item.Value)))
@@ -188,7 +198,7 @@ namespace Akavache
                 return ExceptionHelper.ObservableThrowObjectDisposedException<byte[]>("InMemoryBlobCache");
             }
 
-            CacheEntry entry;
+            CacheEntry? entry;
             lock (_cache)
             {
                 if (!_cache.TryGetValue(key, out entry))
@@ -197,7 +207,12 @@ namespace Akavache
                 }
             }
 
-            if (entry.ExpiresAt != null && Scheduler.Now > entry.ExpiresAt.Value)
+            if (entry is null)
+            {
+                return ExceptionHelper.ObservableThrowKeyNotFoundException<byte[]>(key);
+            }
+
+            if (entry.ExpiresAt is not null && Scheduler.Now > entry.ExpiresAt.Value)
             {
                 lock (_cache)
                 {
@@ -218,13 +233,18 @@ namespace Akavache
                 return ExceptionHelper.ObservableThrowObjectDisposedException<DateTimeOffset?>("InMemoryBlobCache");
             }
 
-            CacheEntry entry;
+            CacheEntry? entry;
             lock (_cache)
             {
                 if (!_cache.TryGetValue(key, out entry))
                 {
                     return Observable.Return<DateTimeOffset?>(null);
                 }
+            }
+
+            if (entry is null)
+            {
+                return ExceptionHelper.ObservableThrowKeyNotFoundException<DateTimeOffset?>(key);
             }
 
             return Observable.Return<DateTimeOffset?>(entry.CreatedAt, Scheduler);
@@ -241,7 +261,7 @@ namespace Akavache
             lock (_cache)
             {
                 return Observable.Return(_cache
-                    .Where(x => x.Value.ExpiresAt == null || x.Value.ExpiresAt >= Scheduler.Now)
+                    .Where(x => x.Value.ExpiresAt is null || x.Value.ExpiresAt >= Scheduler.Now)
                     .Select(x => x.Key)
                     .ToList());
             }
@@ -305,7 +325,7 @@ namespace Akavache
                 return ExceptionHelper.ObservableThrowObjectDisposedException<T>("InMemoryBlobCache");
             }
 
-            CacheEntry entry;
+            CacheEntry? entry;
             lock (_cache)
             {
                 if (!_cache.TryGetValue(key, out entry))
@@ -314,7 +334,12 @@ namespace Akavache
                 }
             }
 
-            if (entry.ExpiresAt != null && Scheduler.Now > entry.ExpiresAt.Value)
+            if (entry is null)
+            {
+                return ExceptionHelper.ObservableThrowKeyNotFoundException<T>(key);
+            }
+
+            if (entry.ExpiresAt is not null && Scheduler.Now > entry.ExpiresAt.Value)
             {
                 lock (_cache)
                 {
@@ -347,9 +372,10 @@ namespace Akavache
             {
                 return Observable.Return(
                     _cache
-                        .Where(x => x.Value.TypeName == typeof(T).FullName && (x.Value.ExpiresAt == null || x.Value.ExpiresAt >= Scheduler.Now))
+                        .Where(x => x.Value.TypeName == typeof(T).FullName && (x.Value.ExpiresAt is null || x.Value.ExpiresAt >= Scheduler.Now))
                         .Select(x => DeserializeObject<T>(x.Value.Value))
-                        .ToList(), Scheduler);
+                        .ToList(),
+                    Scheduler);
             }
         }
 
@@ -394,7 +420,7 @@ namespace Akavache
 
             lock (_cache)
             {
-                var toDelete = _cache.Where(x => x.Value.ExpiresAt != null && Scheduler.Now > x.Value.ExpiresAt).ToArray();
+                var toDelete = _cache.Where(x => x.Value.ExpiresAt is not null && Scheduler.Now > x.Value.ExpiresAt).ToArray();
                 foreach (var kvp in toDelete)
                 {
                     _cache.Remove(kvp.Key);
@@ -424,10 +450,10 @@ namespace Akavache
 
             if (isDisposing)
             {
-                Scheduler = null;
+                Scheduler = CurrentThreadScheduler.Instance;
                 lock (_cache)
                 {
-                    _cache = null;
+                    _cache.Clear();
                 }
 
                 _inner?.Dispose();
@@ -441,9 +467,7 @@ namespace Akavache
 
         private byte[] SerializeObject<T>(T value)
         {
-            var settings = Locator.Current.GetService<JsonSerializerSettings>() ?? new JsonSerializerSettings();
-            settings.ContractResolver = new JsonDateTimeContractResolver(settings.ContractResolver, ForcedDateTimeKind); // This will make us use ticks instead of json ticks for DateTime.
-            var serializer = JsonSerializer.Create(settings);
+            var serializer = GetSerializer();
             using (var ms = new MemoryStream())
             {
                 using (var writer = new BsonDataWriter(ms))
@@ -456,9 +480,8 @@ namespace Akavache
 
         private T DeserializeObject<T>(byte[] data)
         {
-            var settings = Locator.Current.GetService<JsonSerializerSettings>() ?? new JsonSerializerSettings();
-            settings.ContractResolver = new JsonDateTimeContractResolver(settings.ContractResolver, ForcedDateTimeKind); // This will make us use ticks instead of json ticks for DateTime.
-            var serializer = JsonSerializer.Create(settings);
+#pragma warning disable CS8603 // Possible null reference return.
+            var serializer = GetSerializer();
             using (var reader = new BsonDataReader(new MemoryStream(data)))
             {
                 var forcedDateTimeKind = BlobCache.ForcedDateTimeKind;
@@ -470,7 +493,14 @@ namespace Akavache
 
                 try
                 {
-                    return serializer.Deserialize<ObjectWrapper<T>>(reader).Value;
+                    var wrapper = serializer.Deserialize<ObjectWrapper<T>>(reader);
+
+                    if (wrapper is null)
+                    {
+                        return default;
+                    }
+
+                    return wrapper.Value;
                 }
                 catch (Exception ex)
                 {
@@ -478,7 +508,24 @@ namespace Akavache
                 }
 
                 return serializer.Deserialize<T>(reader);
+#pragma warning restore CS8603 // Possible null reference return.
             }
+        }
+
+        private JsonSerializer GetSerializer()
+        {
+            var settings = Locator.Current.GetService<JsonSerializerSettings>() ?? new JsonSerializerSettings();
+            JsonSerializer serializer;
+
+            lock (settings)
+            {
+                _jsonDateTimeContractResolver.ExistingContractResolver = settings.ContractResolver;
+                settings.ContractResolver = _jsonDateTimeContractResolver;
+                serializer = JsonSerializer.Create(settings);
+                settings.ContractResolver = _jsonDateTimeContractResolver.ExistingContractResolver;
+            }
+
+            return serializer;
         }
     }
 }

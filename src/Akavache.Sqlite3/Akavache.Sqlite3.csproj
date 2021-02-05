@@ -1,20 +1,22 @@
 ﻿<Project Sdk="MSBuild.Sdk.Extras">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;Xamarin.iOS10;Xamarin.Mac20;MonoAndroid81;tizen40</TargetFrameworks>
-    <TargetFrameworks Condition=" '$(OS)' == 'Windows_NT' ">$(TargetFrameworks);net461;uap10.0.16299</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;Xamarin.iOS10;Xamarin.Mac20;MonoAndroid10.0;tizen40</TargetFrameworks>
+    <TargetFrameworks Condition=" '$(OS)' == 'Windows_NT' ">$(TargetFrameworks);net461;uap10.0.16299;net5.0</TargetFrameworks>
     <AssemblyName>Akavache.Sqlite3</AssemblyName>
     <RootNamespace>Akavache.Sqlite3</RootNamespace>
     <Description>Akavache Sqlite3</Description>
     <PackageId>akavache.sqlite3</PackageId>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <DefineConstants>$(DefineConstants);USE_SQLITEPCL_RAW;USE_NEW_REFLECTION_API</DefineConstants>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SQLitePCLRaw.core" Version="2.0.3" />
-    <PackageReference Include="System.Reactive" Version="4.4.1" />
-    <PackageReference Include="Splat" Version="9.*" />
+    <PackageReference Include="SQLitePCLRaw.core" Version="2.0.4" />
+    <PackageReference Include="System.Reactive" Version="5.0.0" />
+    <PackageReference Include="Splat" Version="10.*" />
     <PackageReference Include="System.Runtime.InteropServices" Version="4.3.0" />
     <PackageReference Include="System.IO.FileSystem.Primitives" Version="4.3.0" />
     <PackageReference Include="System.Resources.ResourceManager" Version="4.3.0" />
@@ -31,12 +33,6 @@
     <PackageReference Include="System.Net.Primitives" Version="4.3.1" />
   </ItemGroup>
   
-  <Target Name="_RemoveNonExistingResgenFile" BeforeTargets="CoreCompile" Condition="'$(_SdkSetAndroidResgenFile)' == 'true' And '$(AndroidResgenFile)' != '' And !Exists('$(AndroidResgenFile)')">
-    <ItemGroup>
-      <Compile Remove="$(AndroidResgenFile)"/>
-    </ItemGroup>
-  </Target>
-
   <ItemGroup>
     <Compile Remove="EncryptedBlobCache.cs" />
   </ItemGroup>

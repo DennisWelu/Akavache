@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2019 .NET Foundation and Contributors. All rights reserved.
+﻿// Copyright (c) 2020 .NET Foundation and Contributors. All rights reserved.
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for full license information.
@@ -61,7 +61,7 @@ namespace Akavache.Sqlite3
             {
                 // NB: We generally don't want to optimize any op that doesn't
                 // have a key
-                if (key == NullKey)
+                if (key is NullKey)
                 {
                     continue;
                 }
@@ -133,12 +133,12 @@ namespace Akavache.Sqlite3
             {
                 if (item.OperationType == opTypeToDedup)
                 {
-                    currentWrites = currentWrites ?? new List<OperationQueueItem>();
+                    currentWrites ??= new List<OperationQueueItem>();
                     currentWrites.Add(item);
                     continue;
                 }
 
-                if (currentWrites != null)
+                if (currentWrites is not null)
                 {
                     if (currentWrites.Count == 1)
                     {
@@ -146,14 +146,14 @@ namespace Akavache.Sqlite3
                     }
                     else
                     {
-                        yield return new OperationQueueItem()
-                        {
-                            OperationType = currentWrites[0].OperationType,
-                            Parameters = currentWrites[0].Parameters,
-                            Completion = CombineSubjectsByOperation(
+                        yield return new OperationQueueItem(
+                            CombineSubjectsByOperation(
                                 currentWrites[0].Completion,
                                 currentWrites.Skip(1).Select(x => x.Completion),
                                 opTypeToDedup),
+                            currentWrites[0].Parameters)
+                        {
+                            OperationType = currentWrites[0].OperationType,
                         };
                     }
 
@@ -163,14 +163,14 @@ namespace Akavache.Sqlite3
                 yield return item;
             }
 
-            if (currentWrites != null)
+            if (currentWrites is not null)
             {
-                yield return new OperationQueueItem()
+                yield return new OperationQueueItem(
+                    CombineSubjectsByOperation(
+                        currentWrites[0].Completion, currentWrites.Skip(1).Select(x => x.Completion), opTypeToDedup),
+                    currentWrites[0].Parameters)
                 {
                     OperationType = currentWrites[0].OperationType,
-                    Parameters = currentWrites[0].Parameters,
-                    Completion = CombineSubjectsByOperation(
-                        currentWrites[0].Completion, currentWrites.Skip(1).Select(x => x.Completion), opTypeToDedup),
                 };
             }
         }
@@ -187,7 +187,13 @@ namespace Akavache.Sqlite3
 
             foreach (var v in operationQueueItems)
             {
-                var key = v.ParametersAsKeys.First();
+                var key = v.ParametersAsKeys?.First();
+
+                if (key is null)
+                {
+                    continue;
+                }
+
                 elementMap[key] = v.CompletionAsElements;
             }
 
@@ -249,7 +255,7 @@ namespace Akavache.Sqlite3
             var elements = operationQueueItems.SelectMany(x =>
             {
                 subj.Subscribe(x.CompletionAsUnit);
-                return x.ParametersAsElements;
+                return x.ParametersAsElements ?? Enumerable.Empty<CacheElement>();
             }).ToList();
 
             return OperationQueueItem.CreateInsert(
@@ -269,50 +275,51 @@ namespace Akavache.Sqlite3
             var elements = operationQueueItems.SelectMany(x =>
             {
                 subj.Subscribe(x.CompletionAsUnit);
-                return x.ParametersAsKeys;
+                return x.ParametersAsKeys ?? Enumerable.Empty<string>();
             }).ToList();
 
             return OperationQueueItem.CreateInvalidate(
                 OperationType.BulkInvalidateSqliteOperation, elements, subj);
         }
 
-        private static string GetKeyFromTuple(OperationQueueItem item)
+        private static string? GetKeyFromTuple(OperationQueueItem item)
         {
             // NB: This method assumes that the input tuples only have a
             // single item, which the OperationQueue input methods guarantee
             switch (item.OperationType)
             {
-                case OperationType.BulkInsertSqliteOperation:
+                case OperationType.BulkInsertSqliteOperation when item.ParametersAsElements is not null:
                     return item.ParametersAsElements.First().Key;
-                case OperationType.BulkInvalidateByTypeSqliteOperation:
-                case OperationType.BulkInvalidateSqliteOperation:
-                case OperationType.BulkSelectSqliteOperation:
-                case OperationType.BulkSelectByTypeSqliteOperation:
+                case OperationType.BulkInvalidateByTypeSqliteOperation when item.ParametersAsKeys is not null:
+                case OperationType.BulkInvalidateSqliteOperation when item.ParametersAsKeys is not null:
+                case OperationType.BulkSelectSqliteOperation when item.ParametersAsKeys is not null:
+                case OperationType.BulkSelectByTypeSqliteOperation when item.ParametersAsKeys is not null:
                     return item.ParametersAsKeys.First();
                 case OperationType.GetKeysSqliteOperation:
                 case OperationType.InvalidateAllSqliteOperation:
                 case OperationType.VacuumSqliteOperation:
                 case OperationType.DeleteExpiredSqliteOperation:
                 case OperationType.DoNothing:
-                    return default(string);
+                    return default;
                 default:
                     throw new ArgumentException("Unknown operation", nameof(item));
             }
         }
 
-        private static object CombineSubjectsByOperation(object source, IEnumerable<object> subjs, OperationType opType)
+        private static object CombineSubjectsByOperation(object source, IEnumerable<object>? subjects, OperationType opType)
         {
+            var subjectsList = (subjects ?? Enumerable.Empty<object>()).ToList();
             switch (opType)
             {
                 case OperationType.BulkSelectSqliteOperation:
                     return CombineSubjects(
                         (AsyncSubject<IEnumerable<CacheElement>>)source,
-                        subjs.Cast<AsyncSubject<IEnumerable<CacheElement>>>());
+                        subjectsList.Cast<AsyncSubject<IEnumerable<CacheElement>>>());
                 case OperationType.BulkInsertSqliteOperation:
                 case OperationType.BulkInvalidateSqliteOperation:
                     return CombineSubjects(
                         (AsyncSubject<Unit>)source,
-                        subjs.Cast<AsyncSubject<Unit>>());
+                        subjectsList.Cast<AsyncSubject<Unit>>());
                 default:
                     throw new ArgumentException("Invalid operation type", nameof(opType));
             }
