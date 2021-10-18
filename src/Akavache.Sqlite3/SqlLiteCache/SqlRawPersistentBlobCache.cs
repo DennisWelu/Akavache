@@ -1,4 +1,4 @@
-// Copyright (c) 2020 .NET Foundation and Contributors. All rights reserved.
+// Copyright (c) 2021 .NET Foundation and Contributors. All rights reserved.
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for full license information.
@@ -147,9 +147,7 @@ namespace Akavache.Sqlite3
                             ? Observable.Return(cacheElements.First().Value)
                             : ExceptionHelper.ObservableThrowKeyNotFoundException<byte[]>(key);
                 })
-#pragma warning disable CS8604 // Possible null reference argument.
                 .SelectMany(x => AfterReadFromDiskFilter(x, Scheduler))
-#pragma warning restore CS8604 // Possible null reference argument.
                 .PublishLast().PermaRef();
         }
 
@@ -320,9 +318,7 @@ namespace Akavache.Sqlite3
                             ? Observable.Return(cacheElements.First().Value)
                             : ExceptionHelper.ObservableThrowKeyNotFoundException<byte[]>(key);
                 })
-#pragma warning disable CS8604 // Possible null reference argument.
                 .SelectMany(x => AfterReadFromDiskFilter(x, Scheduler))
-#pragma warning restore CS8604 // Possible null reference argument.
                 .SelectMany(DeserializeObject<T>)
                 .PublishLast().PermaRef();
         }
@@ -349,9 +345,7 @@ namespace Akavache.Sqlite3
 
             return _initializer.SelectMany(_ => _opQueue.SelectTypes(new[] { typeFullName })
                     .SelectMany(x => x.ToObservable()
-#pragma warning disable CS8604 // Possible null reference argument.
                         .SelectMany(y => AfterReadFromDiskFilter(y.Value, Scheduler))
-#pragma warning restore CS8604 // Possible null reference argument.
                         .SelectMany(DeserializeObject<T>)
                         .Where(y => y is not null)
                         .Select(y => y!)
@@ -835,9 +829,7 @@ namespace Akavache.Sqlite3
                     }
 
                     var rawVal = serializer.Deserialize<T>(reader);
-#pragma warning disable CS8604 // Possible null reference argument.
                     return Observable.Return(rawVal);
-#pragma warning restore CS8604 // Possible null reference argument.
                 }
                 catch (Exception ex)
                 {

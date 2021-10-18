@@ -1,4 +1,4 @@
-// Copyright (c) 2020 .NET Foundation and Contributors. All rights reserved.
+// Copyright (c) 2021 .NET Foundation and Contributors. All rights reserved.
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for full license information.
@@ -156,7 +156,10 @@ namespace Akavache
         {
             using (var ms = new MemoryStream(compressedImage))
             {
-                return BitmapLoader.Current.Load(ms, desiredWidth, desiredHeight).ToObservable();
+                return BitmapLoader.Current.Load(ms, desiredWidth, desiredHeight).ToObservable()
+                    .SelectMany(bitmap => bitmap is not null ?
+                        Observable.Return(bitmap) :
+                        Observable.Throw<IBitmap>(new IOException("Failed to load the bitmap!")));
             }
         }
     }

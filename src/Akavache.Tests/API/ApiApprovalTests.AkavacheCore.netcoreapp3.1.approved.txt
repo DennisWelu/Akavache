@@ -4,7 +4,7 @@
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Akavache.Mobile")]
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Akavache.Sqlite3")]
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Akavache.Tests")]
-[assembly: System.Runtime.Versioning.TargetFramework(".NETStandard,Version=v2.0", FrameworkDisplayName="")]
+[assembly: System.Runtime.Versioning.TargetFramework(".NETStandard,Version=v2.1", FrameworkDisplayName="")]
 namespace Akavache
 {
     public class AkavacheHttpMixin : Akavache.IAkavacheHttpMixin
@@ -119,7 +119,7 @@ namespace Akavache
     public interface IObjectBlobCache : Akavache.IBlobCache, System.IDisposable
     {
         System.IObservable<System.Collections.Generic.IEnumerable<T>> GetAllObjects<T>();
-        System.IObservable<T> GetObject<T>(string key);
+        System.IObservable<T?> GetObject<T>(string key);
         System.IObservable<System.DateTimeOffset?> GetObjectCreatedAt<T>(string key);
         System.IObservable<System.Reactive.Unit> InsertObject<T>(string key, T value, System.DateTimeOffset? absoluteExpiration = default);
         System.IObservable<System.Reactive.Unit> InvalidateAllObjects<T>();

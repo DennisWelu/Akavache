@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2020 .NET Foundation and Contributors. All rights reserved.
+﻿// Copyright (c) 2021 .NET Foundation and Contributors. All rights reserved.
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for full license information.
@@ -141,6 +141,18 @@ namespace Akavache.Tests
             op3.OnNext(3);
             op3.OnCompleted();
             Assert.Equal(0, op3Result);
+        }
+
+        /// <summary>
+        /// Test to make sure the static caches are initialized.
+        /// </summary>
+        [Fact]
+        public void ShouldInitializeDefaultCaches()
+        {
+            Assert.NotNull(BlobCache.LocalMachine);
+            Assert.NotNull(BlobCache.UserAccount);
+            Assert.NotNull(BlobCache.InMemory);
+            Assert.NotNull(BlobCache.Secure);
         }
     }
 }
