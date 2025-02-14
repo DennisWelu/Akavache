@@ -11,11 +11,7 @@
     <Using Remove="Foundation" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.9" />
-  </ItemGroup>
-  
-  <ItemGroup Condition=" $(TargetFramework.StartsWith('Xamarin')) ">
-    <Reference Include="netstandard" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Akavache.Sqlite3\Akavache.Sqlite3.csproj" />
