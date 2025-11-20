@@ -537,7 +537,7 @@ public class SqliteBlobCache : IBlobCache
             {
                 var entries = keyValuePairs.Select(x => new CacheEntry { CreatedAt = DateTime.Now, Id = x.Key, Value = x.Value, ExpiresAt = expiry });
 
-                await Connection.RunInTransactionAsync(sql =>
+                await RunInTransactionAsync(sql =>
                 {
                     foreach (var entry in entries)
                     {
@@ -583,7 +583,7 @@ public class SqliteBlobCache : IBlobCache
                 var entries = keyValuePairs.Select(x => new CacheEntry { CreatedAt = DateTime.Now, Id = x.Key, Value = x.Value, ExpiresAt = expiry, TypeName = type.FullName });
                 try
                 {
-                    await Connection.RunInTransactionAsync(sql =>
+                    await RunInTransactionAsync(sql =>
                     {
                         if (sql.Handle == null)
                         {
@@ -697,7 +697,7 @@ public class SqliteBlobCache : IBlobCache
         return _initialized.SelectMany(
             async (_) =>
             {
-                await Connection.RunInTransactionAsync(sql =>
+                await RunInTransactionAsync(sql =>
                 {
                     foreach (var key in keys)
                     {
@@ -735,7 +735,7 @@ public class SqliteBlobCache : IBlobCache
         return _initialized.SelectMany(
             async (_) =>
             {
-                await Connection.RunInTransactionAsync(sql =>
+                await RunInTransactionAsync(sql =>
                 {
                     var entries = sql.Table<CacheEntry>().Where(x => keys.Contains(x.Id) && x.TypeName == type.FullName).ToList();
                     foreach (var key in entries)
@@ -764,7 +764,7 @@ public class SqliteBlobCache : IBlobCache
         return _initialized.SelectMany(
             async (_) =>
             {
-                await Connection.RunInTransactionAsync(sql =>
+                await RunInTransactionAsync(sql =>
                 {
                     var entries = sql.Table<CacheEntry>().Where(x => x.TypeName == type.FullName).ToList();
                     foreach (var key in entries)
@@ -793,7 +793,7 @@ public class SqliteBlobCache : IBlobCache
         return _initialized.SelectMany(
             async (_) =>
             {
-                await Connection.RunInTransactionAsync(sql =>
+                await RunInTransactionAsync(sql =>
                 {
                     var entries = sql.Table<CacheEntry>().Where(x => x.TypeName == null).ToList();
                     foreach (var key in entries)
@@ -846,7 +846,7 @@ public class SqliteBlobCache : IBlobCache
 
         return _initialized.SelectMany(async (_, _, _) =>
         {
-            await Connection.RunInTransactionAsync(sql =>
+            await RunInTransactionAsync(sql =>
             {
                 var expiryValue = absoluteExpiration?.UtcDateTime;
                 sql.Execute("UPDATE CacheEntry SET ExpiresAt = ? WHERE Id = ?", expiryValue, key);
@@ -881,7 +881,7 @@ public class SqliteBlobCache : IBlobCache
 
         return _initialized.SelectMany(async (_, _, _) =>
         {
-            await Connection.RunInTransactionAsync(sql =>
+            await RunInTransactionAsync(sql =>
             {
                 var expiryValue = absoluteExpiration?.UtcDateTime;
                 sql.Execute("UPDATE CacheEntry SET ExpiresAt = ? WHERE Id = ? AND TypeName = ?", expiryValue, key, type.FullName);
@@ -911,7 +911,7 @@ public class SqliteBlobCache : IBlobCache
 
         return _initialized.SelectMany(async (_, _, _) =>
         {
-            await Connection.RunInTransactionAsync(sql =>
+            await RunInTransactionAsync(sql =>
             {
                 var expiryValue = absoluteExpiration?.UtcDateTime;
                 foreach (var key in keys)
@@ -949,7 +949,7 @@ public class SqliteBlobCache : IBlobCache
 
         return _initialized.SelectMany(async (_, _, _) =>
         {
-            await Connection.RunInTransactionAsync(sql =>
+            await RunInTransactionAsync(sql =>
             {
                 var expiryValue = absoluteExpiration?.UtcDateTime;
                 foreach (var key in keys)
@@ -1164,5 +1164,24 @@ public class SqliteBlobCache : IBlobCache
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Runs the given action:
+    /// - Immediately if part of a manually controlled transaction.
+    /// - Through a new transaction that is committed after the action completes.
+    /// </summary>
+    private Task RunInTransactionAsync(Action<SQLiteConnection> action)
+    {
+        var connWithLock = Connection.GetConnection();
+
+        if (!connWithLock.IsInTransaction)
+        {
+            return Connection.RunInTransactionAsync(action);
+        }
+
+        action(connWithLock);
+
+        return Task.CompletedTask;
     }
 }

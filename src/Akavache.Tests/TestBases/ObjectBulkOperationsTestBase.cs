@@ -5,6 +5,7 @@
 
 using Akavache.Core;
 using Akavache.NewtonsoftJson;
+using Akavache.Sqlite3;
 using Akavache.SystemTextJson;
 using Akavache.Tests.Helpers;
 
@@ -19,6 +20,50 @@ namespace Akavache.Tests.TestBases;
 public abstract class ObjectBulkOperationsTestBase : IDisposable
 {
     private bool _disposed;
+
+    /// <summary>
+    /// Tests to make sure that Get works with multiple key types.
+    /// </summary>
+    /// <param name="serializerType">Type of the serializer.</param>
+    /// <returns>
+    /// A task to monitor the progress.
+    /// </returns>
+    [TestCase(typeof(SystemJsonSerializer))]
+    [TestCase(typeof(SystemJsonBsonSerializer))]
+    [TestCase(typeof(NewtonsoftSerializer))]
+    [TestCase(typeof(NewtonsoftBsonSerializer))]
+    [Test]
+    public async Task ManualTransactionRollbackAndCommits(Type serializerType)
+    {
+        var serializer = SetupTestSerializer(serializerType);
+
+        Assert.That(serializer, Is.Not.Null);
+        using (Utility.WithEmptyDirectory(out var path))
+        await using (var fixture = CreateBlobCache(path, serializer))
+        {
+            var data = Tuple.Create("Foo", 4);
+            string[] keys = ["Foo", "Bar", "Baz"];
+
+            var conn = ((SqliteBlobCache)fixture).Connection.GetConnection();
+
+            var keysBefore = await fixture.GetAllKeys().ToList();
+
+            conn.BeginTransaction();
+            await Task.WhenAll(keys.Select(async v => await fixture.InsertObject(v, data).FirstAsync()));
+            conn.Rollback();
+
+            var keysAfter = await fixture.GetAllKeys().ToList();
+            Assert.That(keysAfter, Has.Count.EqualTo(keysBefore.Count));
+
+            conn.BeginTransaction();
+            await Task.WhenAll(keys.Select(async v => await fixture.InsertObject(v, data).FirstAsync()));
+            conn.Commit();
+
+            var allData = await fixture.GetObjects<Tuple<string, int>>(keys).ToList().FirstAsync();
+            Assert.That(allData, Has.Count.EqualTo(keys.Length));
+            Assert.That(allData.All(x => x.Value.Item1 == data.Item1 && x.Value.Item2 == data.Item2), Is.True);
+        }
+    }
 
     /// <summary>
     /// Tests to make sure that Get works with multiple key types.
