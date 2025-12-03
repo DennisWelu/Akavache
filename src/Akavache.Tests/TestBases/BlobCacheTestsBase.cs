@@ -4,11 +4,14 @@
 // See the LICENSE file in the project root for full license information.
 
 using Akavache.Core;
+using Akavache.EncryptedSqlite3;
 using Akavache.NewtonsoftJson;
+using Akavache.Sqlite3;
 using Akavache.SystemTextJson;
 using Akavache.Tests.Helpers;
 
 using NUnit.Framework;
+using SQLite;
 
 namespace Akavache.Tests;
 
@@ -30,6 +33,63 @@ public abstract class BlobCacheTestsBase : IDisposable
         [typeof(NewtonsoftSerializer)],
         [typeof(NewtonsoftBsonSerializer)], // BSON-enabled Newtonsoft.Json serializer
     ];
+
+    /// <summary>
+    /// Tests to make sure that Get works with multiple key types.
+    /// </summary>
+    /// <param name="serializerType">Type of the serializer.</param>
+    /// <returns>
+    /// A task to monitor the progress.
+    /// </returns>
+    [TestCase(typeof(SystemJsonSerializer))]
+    [TestCase(typeof(SystemJsonBsonSerializer))]
+    [TestCase(typeof(NewtonsoftSerializer))]
+    [TestCase(typeof(NewtonsoftBsonSerializer))]
+    [Test]
+    public async Task ManualTransactionRollbackAndCommits(Type serializerType)
+    {
+        var serializer = SetupTestSerializer(serializerType);
+
+        Assert.That(serializer, Is.Not.Null);
+        using (Utility.WithEmptyDirectory(out var path))
+        await using (var fixture = CreateBlobCache(path, serializer))
+        {
+            var data = Tuple.Create("Foo", 4);
+            string[] keys = ["Foo", "Bar", "Baz"];
+
+            SQLiteConnection conn;
+            switch (fixture)
+            {
+                case SqliteBlobCache bc:
+                    conn = bc.Connection.GetConnection();
+                    break;
+
+                case EncryptedSqliteBlobCache ebc:
+                    conn = ebc.Connection.GetConnection();
+                    break;
+
+                default:
+                    return; // Only applies to transactional caches
+            }
+
+            var keysBefore = await fixture.GetAllKeys().ToList();
+
+            conn.BeginTransaction();
+            await Task.WhenAll(keys.Select(async v => await fixture.InsertObject(v, data).FirstAsync()));
+            conn.Rollback();
+
+            var keysAfter = await fixture.GetAllKeys().ToList();
+            Assert.That(keysAfter, Has.Count.EqualTo(keysBefore.Count));
+
+            conn.BeginTransaction();
+            await Task.WhenAll(keys.Select(async v => await fixture.InsertObject(v, data).FirstAsync()));
+            conn.Commit();
+
+            var allData = await fixture.GetObjects<Tuple<string, int>>(keys).ToList().FirstAsync();
+            Assert.That(allData, Has.Count.EqualTo(keys.Length));
+            Assert.That(allData.All(x => x.Value.Item1 == data.Item1 && x.Value.Item2 == data.Item2), Is.True);
+        }
+    }
 
     /// <summary>
     /// Tests to make sure the download url extension methods download correctly.
