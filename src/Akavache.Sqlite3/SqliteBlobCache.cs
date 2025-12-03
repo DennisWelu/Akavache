@@ -210,14 +210,14 @@ public class SqliteBlobCache : IBlobCache
             var row = rows.FirstOrDefault();
             if (row?.Value is not null)
             {
-                return row.Value!;
+                return AfterReadFromDiskFilter(row.Value!);
             }
 
             // Fallback to legacy V10 table (CacheElement)
             var legacy = await TryGetLegacyValueAsync(key, time, null).ConfigureAwait(false);
             if (legacy is not null)
             {
-                return legacy;
+                return AfterReadFromDiskFilter(legacy);
             }
 
             throw new KeyNotFoundException($"The given key '{key}' was not present in the cache.");
@@ -247,7 +247,7 @@ public class SqliteBlobCache : IBlobCache
         return _initialized.SelectMany((_, _, _) => Connection.Table<CacheEntry>().Where(x => x.Id != null && (x.ExpiresAt == null || x.ExpiresAt > time) && keys.Contains(x.Id)).ToListAsync())
             .SelectMany(x => x)
             .Where(x => x?.Value is not null && x?.Id is not null)
-            .Select(x => new KeyValuePair<string, byte[]>(x.Id!, x.Value!));
+            .Select(x => new KeyValuePair<string, byte[]>(x.Id!, AfterReadFromDiskFilter(x.Value!)));
     }
 
     /// <inheritdoc/>
@@ -286,14 +286,14 @@ public class SqliteBlobCache : IBlobCache
             var row = rows.FirstOrDefault();
             if (row?.Value is not null)
             {
-                return row.Value!;
+                return AfterReadFromDiskFilter(row.Value!);
             }
 
             // Fallback to legacy V10 table (CacheElement)
             var legacy = await TryGetLegacyValueAsync(key, time, type).ConfigureAwait(false);
             if (legacy is not null)
             {
-                return legacy;
+                return AfterReadFromDiskFilter(legacy);
             }
 
             throw new KeyNotFoundException($"The given key '{key}' (type '{type.FullName}') was not present in the cache.");
@@ -327,7 +327,7 @@ public class SqliteBlobCache : IBlobCache
         return _initialized.SelectMany((_, _, _) => Connection.Table<CacheEntry>().Where(x => x.Id != null && (x.ExpiresAt == null || x.ExpiresAt > time) && keys.Contains(x.Id) && x.TypeName == type.FullName).ToListAsync())
             .SelectMany(x => x)
             .Where(x => x?.Value is not null && x?.Id is not null)
-            .Select(x => new KeyValuePair<string, byte[]>(x.Id!, x.Value!));
+            .Select(x => new KeyValuePair<string, byte[]>(x.Id!, AfterReadFromDiskFilter(x.Value!)));
     }
 
     /// <inheritdoc/>
@@ -352,7 +352,7 @@ public class SqliteBlobCache : IBlobCache
         return _initialized.SelectMany((_, _, _) => Connection.Table<CacheEntry>().Where(x => x.Id != null && (x.ExpiresAt == null || x.ExpiresAt > time) && x.TypeName == type.FullName).ToListAsync())
             .SelectMany(x => x)
             .Where(x => x?.Value is not null && x?.Id is not null)
-            .Select(x => new KeyValuePair<string, byte[]>(x.Id!, x.Value!));
+            .Select(x => new KeyValuePair<string, byte[]>(x.Id!, AfterReadFromDiskFilter(x.Value!)));
     }
 
     /// <inheritdoc/>
@@ -535,7 +535,13 @@ public class SqliteBlobCache : IBlobCache
         return _initialized.SelectMany(
             async (_, _, _) =>
             {
-                var entries = keyValuePairs.Select(x => new CacheEntry { CreatedAt = DateTime.Now, Id = x.Key, Value = x.Value, ExpiresAt = expiry });
+                var entries = keyValuePairs.Select(x => new CacheEntry
+                {
+                    CreatedAt = DateTime.Now,
+                    Id = x.Key,
+                    Value = BeforeWriteToDiskFilter(x.Value),
+                    ExpiresAt = expiry
+                });
 
                 await RunInTransactionAsync(sql =>
                 {
@@ -580,7 +586,14 @@ public class SqliteBlobCache : IBlobCache
 
         return _initialized.SelectMany(async (_, _, _) =>
             {
-                var entries = keyValuePairs.Select(x => new CacheEntry { CreatedAt = DateTime.Now, Id = x.Key, Value = x.Value, ExpiresAt = expiry, TypeName = type.FullName });
+                var entries = keyValuePairs.Select(x => new CacheEntry
+                {
+                    CreatedAt = DateTime.Now,
+                    Id = x.Key,
+                    Value = BeforeWriteToDiskFilter(x.Value),
+                    ExpiresAt = expiry,
+                    TypeName = type.FullName
+                });
                 try
                 {
                     await RunInTransactionAsync(sql =>
@@ -1079,19 +1092,20 @@ public class SqliteBlobCache : IBlobCache
     /// data.
     /// </summary>
     /// <param name="data">The byte data about to be written to disk.</param>
-    /// <param name="scheduler">The scheduler to use if an operation has
-    /// to be deferred. If the operation can be done immediately, use
-    /// Observable.Return and ignore this parameter.</param>
-    /// <returns>A Future result representing the encrypted data.</returns>
-    protected virtual IObservable<byte[]> BeforeWriteToDiskFilter(byte[] data, IScheduler scheduler)
-    {
-        if (_disposed)
-        {
-            return IBlobCache.ExceptionHelpers.ObservableThrowObjectDisposedException<byte[]>("SqlitePersistentBlobCache");
-        }
+    /// <returns>The data now encrypted.</returns>
+    protected virtual byte[] BeforeWriteToDiskFilter(byte[] data) =>
+        !_disposed ? data : throw new ObjectDisposedException("The cache was disposed.");
 
-        return Observable.Return(data, scheduler);
-    }
+    /// <summary>
+    /// This method is called immediately after reading any data to disk.
+    /// Override this in encrypting data stores in order to decrypt the
+    /// data.
+    /// </summary>
+    /// <param name="data">The byte data that has just been read from
+    /// disk.</param>
+    /// <returns>The data now decrypted.</returns>
+    protected virtual byte[] AfterReadFromDiskFilter(byte[] data) =>
+        !_disposed ? data : throw new ObjectDisposedException("The cache was disposed.");
 
     /// <summary>
     /// Initializes the database.
